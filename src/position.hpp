@@ -11,6 +11,7 @@
 namespace chess {
 
 struct move_t;
+struct undo_t;
 
 struct position_t final {
   constexpr position_t(int) noexcept
@@ -27,6 +28,7 @@ struct position_t final {
     squares_t{d1, d8}, // QUEEN
     squares_t{e1, e8} // KING
    }
+   , en_passant{}
    , side_to_move{WHITE} {}
 
   constexpr position_t() noexcept
@@ -43,6 +45,7 @@ struct position_t final {
     squares_t{d1, d8}, // QUEEN
     squares_t{e1, e8} // KING
    }
+   , en_passant{}
    , side_to_move{WHITE} {}
 
   constexpr position_t(std::string_view fen) noexcept {
@@ -115,12 +118,8 @@ struct position_t final {
     // }
 
     std::string_view en_passant_part {*fen_part++};
-    // if (en_passant_part[0] != '-') {
-    //     new_state.en_passant = en_passant_part;
-    //     new_state.hash ^= hashes::en_passant(new_state.en_passant);
-    // } else {
-    //     new_state.en_passant = NO_SQUARE;
-    // }
+    if (en_passant_part[0] != '-')
+        en_passant = squares_t{square_t{file_e(en_passant_part[0] - 'a'), rank_e(en_passant_part[1] - '1')}};
 
     // if (fen_part != fen_parts.end()) {
     //     std::string_view half_move_part {*fen_part++};
@@ -158,6 +157,7 @@ struct position_t final {
   constexpr squares_t by(const type_t type1, const type_t type2) const noexcept { return by(type1) | by(type2); }
   constexpr squares_t by(const side_t side, const type_t type1, const type_t type2) const noexcept { return by(side) & (by(type1, type2)); }
   constexpr side_t side() const noexcept { return side_to_move; }
+  constexpr squares_t ep() const noexcept { return en_passant; }
 
   constexpr squares_t checkers(side_t side) const noexcept {
     using namespace attacks::lookup;
@@ -208,13 +208,15 @@ struct position_t final {
     return result;
   }
 
-  friend piece_t do_move(position_t &position, const move_t move) noexcept;
-  friend void undo_move(position_t &position, const move_t move, const piece_t captured) noexcept;
+  friend struct undo_t;
+  friend undo_t do_move(position_t &position, const move_t move) noexcept;
+  friend void undo_move(position_t &position, const move_t move, const undo_t undo) noexcept;
 
 private:
   std::array<piece_t, square_t::max> piece_at_square;
   std::array<squares_t, side_t::max> occupied_by_side;
   std::array<squares_t, type_t::max> occupied_by_type;
+  squares_t en_passant;
   side_t side_to_move;
 };
 

@@ -69,11 +69,12 @@ std::span<move_t> generate_moves(const position_t &position, const std::span<mov
         count += splat_sliders(from, bishop(from, occupied) & not_us, buffer.subspan(count));
 
     const squares_t pawns = position.by(side, P);
+    const squares_t ep = position.ep();
     if (side == WHITE) {
         const squares_t push1 = (pawns << 8) & empty;
         const squares_t push2 = ((pawns & squares_t{_2}) << 8 & empty) << 8 & empty;
-        const squares_t left  = (pawns << 7) & ~squares_t{h} & enemies;
-        const squares_t right = (pawns << 9) & ~squares_t{a} & enemies;
+        const squares_t left  = (pawns << 7) & ~squares_t{h} & (enemies | ep);
+        const squares_t right = (pawns << 9) & ~squares_t{a} & (enemies | ep);
 
         count += splat_pawns(-8, push1, buffer.subspan(count));
         count += splat_pawns(-16, push2, buffer.subspan(count));
@@ -82,8 +83,9 @@ std::span<move_t> generate_moves(const position_t &position, const std::span<mov
     } else {
         const squares_t push1 = (pawns >> 8) & empty;
         const squares_t push2 = ((pawns & squares_t{_7}) >> 8 & empty) >> 8 & empty;
-        const squares_t left  = (pawns >> 9) & ~squares_t{h} & enemies;
-        const squares_t right = (pawns >> 7) & ~squares_t{a} & enemies;
+        const squares_t left  = (pawns >> 9) & ~squares_t{h} & (enemies | ep);
+        const squares_t right = (pawns >> 7) & ~squares_t{a} & (enemies | ep);
+
 
         count += splat_pawns(+8, push1, buffer.subspan(count));
         count += splat_pawns(+16, push2, buffer.subspan(count));
