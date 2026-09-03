@@ -179,20 +179,6 @@ struct position_t final {
            (pawn(ksq, side) & by(!side, P));
   }
 
-//   constexpr bool check(side_t side) const noexcept {
-//     return !checkers(side).empty();
-//   }
-
-//   // squares strictly between two rank/file-aligned squares
-//   constexpr squares_t between_straight(square_t from, square_t to) const noexcept {
-//     return attacks::lookup::rook(from, squares_t{to}) & attacks::lookup::rook(to, squares_t{from});
-//   }
-
-//   // squares strictly between two diagonally-aligned squares
-//   constexpr squares_t between_diagonal(square_t from, square_t to) const noexcept {
-//     return attacks::lookup::bishop(from, squares_t{to}) & attacks::lookup::bishop(to, squares_t{from});
-//   }
-
   // own pieces that would expose the king to a slider attack if moved
   constexpr squares_t pinned(side_t side) const noexcept {
     using namespace attacks::lookup;
