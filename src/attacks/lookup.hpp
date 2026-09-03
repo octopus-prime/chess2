@@ -107,6 +107,16 @@ constexpr squares_t pawn(const square_t pawn, const side_t side) noexcept {
   return table[side][pawn];
 }
 
+// squares strictly between two rank/file-aligned squares
+constexpr squares_t between_straight(square_t from, square_t to) noexcept {
+  return rook(from, squares_t{to}) & rook(to, squares_t{from});
+}
+
+// squares strictly between two diagonally-aligned squares
+constexpr squares_t between_diagonal(square_t from, square_t to) noexcept {
+  return bishop(from, squares_t{to}) & bishop(to, squares_t{from});
+}
+
 static_assert(king(e4) == squares_t{d3, e3, f3, d4, f4, d5, e5, f5});
 static_assert(knight(e4) == squares_t{c3, d2, f2, g3, g5, f6, d6, c5});
 static_assert(rook(e4, squares_t{}) == squares_t{e1, e2, e3, e5, e6, e7, e8, a4, b4, c4, d4, f4, g4, h4});
@@ -114,5 +124,10 @@ static_assert(bishop(e4, squares_t{}) == squares_t{b1, c2, d3, f5, g6, h7, a8, b
 static_assert(queen(e4, squares_t{}) == squares_t{b1, c2, d3, f5, g6, h7, a8, b7, c6, d5, f3, g2, h1, e1, e2, e3, e5, e6, e7, e8, a4, b4, c4, d4, f4, g4, h4}); 
 static_assert(pawn(e4, WHITE) == squares_t{d5, f5});
 static_assert(pawn(e4, BLACK) == squares_t{d3, f3});
+static_assert(between_straight(e4, e8) == squares_t{e5, e6, e7});
+static_assert(between_straight(e4, a4) == squares_t{b4, c4, d4});
+static_assert(between_diagonal(e4, h7) == squares_t{f5, g6});
+static_assert(between_diagonal(e4, a8) == squares_t{d5, c6, b7});
+static_assert(between_diagonal(a1, h8) == squares_t{b2, c3, d4, e5, f6, g7});
 
 } // namespace chess::attacks::lookup

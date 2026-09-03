@@ -159,13 +159,53 @@ struct position_t final {
   constexpr squares_t by(const side_t side, const type_t type1, const type_t type2) const noexcept { return by(side) & (by(type1, type2)); }
   constexpr side_t side() const noexcept { return side_to_move; }
 
-  constexpr bool check(side_t side) const noexcept {
+  constexpr squares_t checkers(side_t side) const noexcept {
+    using namespace attacks::lookup;
+
+    const square_t ksq = by(side, K).front();
+    return (king(ksq) & by(!side, K)) |
+           (knight(ksq) & by(!side, N)) |
+           (rook(ksq, by()) & by(!side, R, Q)) |
+           (bishop(ksq, by()) & by(!side, B, Q)) |
+           (pawn(ksq, side) & by(!side, P));
+  }
+
+//   constexpr bool check(side_t side) const noexcept {
+//     return !checkers(side).empty();
+//   }
+
+//   // squares strictly between two rank/file-aligned squares
+//   constexpr squares_t between_straight(square_t from, square_t to) const noexcept {
+//     return attacks::lookup::rook(from, squares_t{to}) & attacks::lookup::rook(to, squares_t{from});
+//   }
+
+//   // squares strictly between two diagonally-aligned squares
+//   constexpr squares_t between_diagonal(square_t from, square_t to) const noexcept {
+//     return attacks::lookup::bishop(from, squares_t{to}) & attacks::lookup::bishop(to, squares_t{from});
+//   }
+
+  // own pieces that would expose the king to a slider attack if moved
+  constexpr squares_t pinned(side_t side) const noexcept {
+    using namespace attacks::lookup;
+
     const square_t king = by(side, K).front();
-    return attacks::lookup::king(king) & by(!side, K) ||
-           attacks::lookup::knight(king) & by(!side, N) ||
-           attacks::lookup::rook(king, by()) & by(!side, R, Q) ||
-           attacks::lookup::bishop(king, by()) & by(!side, B, Q) ||
-           attacks::lookup::pawn(king, side) & by(!side, P);
+    const squares_t own = by(side);
+    const squares_t occ = by();
+    squares_t result{};
+
+    for (const square_t enemy : rook(king, squares_t{}) & by(!side, R, Q)) {
+      const squares_t blockers = between_straight(king, enemy) & occ;
+      if (blockers.size() == 1)
+        result |= blockers & own;
+    }
+
+    for (const square_t enemy : bishop(king, squares_t{}) & by(!side, B, Q)) {
+      const squares_t blockers = between_diagonal(king, enemy) & occ;
+      if (blockers.size() == 1)
+        result |= blockers & own;
+    }
+
+    return result;
   }
 
   friend piece_t do_move(position_t &position, const move_t move) noexcept;

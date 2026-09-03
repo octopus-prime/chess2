@@ -21,7 +21,7 @@ add_compile_options(
   -Wmissing-field-initializers
   -Wundef
 
-  -Wno-deprecated-declarations
+  # -Wno-deprecated-declarations
 )
 
 add_executable(chess
