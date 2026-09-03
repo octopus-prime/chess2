@@ -5,12 +5,12 @@
 #include "types/piece.hpp"
 #include "types/squares.hpp"
 #include "attacks/lookup.hpp"
+#include "move.hpp"
 #include <array>
 #include <ranges>
+#include <span>
 
 namespace chess {
-
-struct move_t;
 
 constexpr size_t MAX_PLY = 256;
 
@@ -19,6 +19,8 @@ struct state_t {
   square_t captured_square;
   squares_t en_passant;
 };
+
+static_assert(sizeof(state_t) == 16);
 
 struct position_t final {
   constexpr position_t(int) noexcept
@@ -215,8 +217,9 @@ struct position_t final {
     return result;
   }
 
-  friend void do_move(position_t &position, const move_t move) noexcept;
-  friend void undo_move(position_t &position, const move_t move) noexcept;
+  std::span<move_t> generate_moves(std::span<move_t, 256> buffer) const noexcept;
+  void do_move(const move_t move) noexcept;
+  void undo_move(const move_t move) noexcept;
 
 private:
   std::array<piece_t, square_t::max> piece_at_square;
@@ -228,6 +231,7 @@ private:
   size_t history_size = 0;
 };
 
+static_assert(sizeof(position_t) == 4256);
 static_assert(position_t{}.by() == squares_t{_1, _2, _7, _8});
 static_assert(position_t{}.by(WHITE) == squares_t{_1, _2});
 static_assert(position_t{}.by(BLACK) == squares_t{_7, _8});
