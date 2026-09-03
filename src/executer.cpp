@@ -2,11 +2,11 @@
 
 namespace chess {
 
-undo_t do_move(position_t &position, const move_t move) noexcept {
+void do_move(position_t &position, const move_t move) noexcept {
     const square_t from = move.from();
     const square_t to = move.to();
     const piece_t piece = position.at(from);
-    const squares_t prev_en_passant = position.ep();
+    const squares_t prev_en_passant = position.en_passant;
 
     square_t captured_square = to;
     piece_t captured = position.at(to);
@@ -39,28 +39,30 @@ undo_t do_move(position_t &position, const move_t move) noexcept {
 
     position.side_to_move = !position.side_to_move;
 
-    return {captured, captured_square, prev_en_passant};
+    position.history[position.history_size++] = {captured, captured_square, prev_en_passant};
 }
 
-void undo_move(position_t &position, const move_t move, const undo_t undo) noexcept {
+void undo_move(position_t &position, const move_t move) noexcept {
+    const state_t state = position.history[--position.history_size];
+
     const square_t from = move.from();
     const square_t to = move.to();
     const piece_t piece = position.at(to);
 
     position.piece_at_square[to] = piece_t{};
     position.piece_at_square[from] = piece;
-    if (undo.captured != NO_PIECE)
-        position.piece_at_square[undo.captured_square] = undo.captured;
+    if (state.captured != NO_PIECE)
+        position.piece_at_square[state.captured_square] = state.captured;
 
     position.occupied_by_side[piece.side()].flip(squares_t{from, to});
     position.occupied_by_type[piece.type()].flip(squares_t{from, to});
 
-    if (undo.captured != NO_PIECE) {
-        position.occupied_by_side[undo.captured.side()].flip(squares_t{undo.captured_square});
-        position.occupied_by_type[undo.captured.type()].flip(squares_t{undo.captured_square});
+    if (state.captured != NO_PIECE) {
+        position.occupied_by_side[state.captured.side()].flip(squares_t{state.captured_square});
+        position.occupied_by_type[state.captured.type()].flip(squares_t{state.captured_square});
     }
 
-    position.en_passant = undo.en_passant;
+    position.en_passant = state.en_passant;
     position.side_to_move = !position.side_to_move;
 }
 

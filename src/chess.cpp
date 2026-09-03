@@ -30,10 +30,10 @@ struct perft_t {
         for (const move_t move : moves) {
             const bool is_ep = !ep.empty() && squares_t{move.to()} == ep && position.at(move.from()).type() == P;
             const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()}) || is_ep;
-            const undo_t undo = do_move(position, move);
+            do_move(position, move);
             if (!maybe_illegal || position.checkers(side).empty())
                 count += (*this)(depth - 1);
-            undo_move(position, move, undo);
+            undo_move(position, move);
         }
 
         return count;
@@ -88,15 +88,15 @@ struct negamax_t {
         for (const move_t move : moves) {
             const bool is_ep = !ep.empty() && squares_t{move.to()} == ep && position.at(move.from()).type() == P;
             const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()}) || is_ep;
-            const undo_t undo = do_move(position, move);
+            do_move(position, move);
             if (!maybe_illegal || position.checkers(side).empty()) {
                 score = std::max<int16_t>(score, int16_t(-(*this)(depth - 1, -beta, -alpha)));
                 if (score >= beta) {
-                    undo_move(position, move, undo);
+                    undo_move(position, move);
                     return score;
                 }
             }
-            undo_move(position, move, undo);
+            undo_move(position, move);
         }
 
         return score;
@@ -146,7 +146,7 @@ struct pvs_t {
         for (const move_t move : moves) {
             const bool is_ep = !ep.empty() && squares_t{move.to()} == ep && position.at(move.from()).type() == P;
             const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()}) || is_ep;
-            const undo_t undo = do_move(position, move);
+            do_move(position, move);
             if (!maybe_illegal || position.checkers(side).empty()) {
                 if (score > alpha) {
                     score = std::max<int16_t>(score, int16_t(-(*this)(depth - 1, -beta, -alpha)));
@@ -156,11 +156,11 @@ struct pvs_t {
                         score = std::max<int16_t>(score, int16_t(-(*this)(depth - 1, -beta, -alpha)));
                 }
                 if (score >= beta) {
-                    undo_move(position, move, undo);
+                    undo_move(position, move);
                     return score;
                 }
             }
-            undo_move(position, move, undo);
+            undo_move(position, move);
         }
         return score;
     }
@@ -171,6 +171,7 @@ struct pvs_t {
 
 void test_perft() {
     position_t position{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"};
+    // do_move(position, move_t{e2, e4});
     // position_t position{"r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -"};
     // position_t position{"8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1"};
     perft_t perft{position};

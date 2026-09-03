@@ -11,7 +11,14 @@
 namespace chess {
 
 struct move_t;
-struct undo_t;
+
+constexpr size_t MAX_PLY = 256;
+
+struct state_t {
+  piece_t captured;
+  square_t captured_square;
+  squares_t en_passant;
+};
 
 struct position_t final {
   constexpr position_t(int) noexcept
@@ -208,9 +215,8 @@ struct position_t final {
     return result;
   }
 
-  friend struct undo_t;
-  friend undo_t do_move(position_t &position, const move_t move) noexcept;
-  friend void undo_move(position_t &position, const move_t move, const undo_t undo) noexcept;
+  friend void do_move(position_t &position, const move_t move) noexcept;
+  friend void undo_move(position_t &position, const move_t move) noexcept;
 
 private:
   std::array<piece_t, square_t::max> piece_at_square;
@@ -218,9 +224,10 @@ private:
   std::array<squares_t, type_t::max> occupied_by_type;
   squares_t en_passant;
   side_t side_to_move;
+  std::array<state_t, MAX_PLY> history{};
+  size_t history_size = 0;
 };
 
-// static_assert(sizeof(position_t) == 136);
 static_assert(position_t{}.by() == squares_t{_1, _2, _7, _8});
 static_assert(position_t{}.by(WHITE) == squares_t{_1, _2});
 static_assert(position_t{}.by(BLACK) == squares_t{_7, _8});
