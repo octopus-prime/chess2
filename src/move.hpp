@@ -2,6 +2,7 @@
 
 #include "types/square.hpp"
 #include "types/type.hpp"
+#include <array>
 
 namespace chess {
 
@@ -30,6 +31,8 @@ static_assert(move_t(a1, b2, Q) == 16960);
 static_assert(move_t(a1, b2, Q).from() == a1);
 static_assert(move_t(a1, b2, Q).to() == b2);
 static_assert(move_t(a1, b2, Q).promotion() == Q);
+
+using moves_t = std::array<move_t, 256>;
 
 } // namespace chess
 

@@ -12,7 +12,6 @@ add_compile_options(
   -Wall
   -Wextra
   -Wpedantic
-  # -Werror
   -Wconversion
   -Wsign-conversion
   -Wshadow
@@ -20,19 +19,13 @@ add_compile_options(
   -Wunreachable-code
   -Wmissing-field-initializers
   -Wundef
-
-  # -Wno-deprecated-declarations
+  # -Werror
 )
 
 add_executable(chess
-  src/generator.cpp
-  src/executer.cpp
+  src/move_generator.cpp
+  src/move_executor.cpp
   src/chess.cpp
 )
 
 target_include_directories(chess PRIVATE src)
-
-# target_sources(chess PRIVATE FILE_SET CXX_MODULES FILES
-#   src/types/file.cppm
-#   # src/hashes.cppm
-# )

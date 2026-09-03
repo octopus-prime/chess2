@@ -1,5 +1,4 @@
 #include "position.hpp"
-#include "generator.hpp"
 #include "attacks/generator.hpp"
 #include <chrono>
 #include <functional>
@@ -16,21 +15,23 @@ struct perft_t {
         if (depth == 0)
             return 1;
 
-        generator::moves_t buffer{};
-        std::span<move_t> moves = generator::generate_moves(position, buffer);
+        moves_t buffer{};
+        std::span<move_t> moves = position.generate_moves(buffer);
         size_t count = 0;
 
         const side_t side = position.side();
         const square_t king = position.by(side, K).front();
         const bool check = !position.checkers(side).empty();
         const squares_t pinned = position.pinned(side);
+        const squares_t ep = position.ep();
 
         for (const move_t move : moves) {
-            const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()});
-            const piece_t captured = do_move(position, move);
+            const bool is_ep = !ep.empty() && squares_t{move.to()} == ep && position.at(move.from()).type() == P;
+            const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()}) || is_ep;
+            position.do_move(move);
             if (!maybe_illegal || position.checkers(side).empty())
                 count += (*this)(depth - 1);
-            undo_move(position, move, captured);
+            position.undo_move(move);
         }
 
         return count;
@@ -73,25 +74,27 @@ struct negamax_t {
         if (depth == 0)
             return evaluate(position);
 
-        generator::moves_t buffer{};
-        std::span<move_t> moves = generator::generate_moves(position, buffer);
+        moves_t buffer{};
+        std::span<move_t> moves = position.generate_moves(buffer);
         int16_t score = -30000;
 
         const square_t king = position.by(side, K).front();
         const bool check = !position.checkers(side).empty();
         const squares_t pinned = position.pinned(side);
+        const squares_t ep = position.ep();
 
         for (const move_t move : moves) {
-            const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()});
-            const piece_t captured = do_move(position, move);
+            const bool is_ep = !ep.empty() && squares_t{move.to()} == ep && position.at(move.from()).type() == P;
+            const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()}) || is_ep;
+            position.do_move(move);
             if (!maybe_illegal || position.checkers(side).empty()) {
                 score = std::max<int16_t>(score, int16_t(-(*this)(depth - 1, -beta, -alpha)));
                 if (score >= beta) {
-                    undo_move(position, move, captured);
+                    position.undo_move(move);
                     return score;
                 }
             }
-            undo_move(position, move, captured);
+            position.undo_move(move);
         }
 
         return score;
@@ -124,8 +127,8 @@ struct pvs_t {
         if (depth == 0)
             return evaluate(position);
 
-        generator::moves_t buffer{};
-        std::span<move_t> moves = generator::generate_moves(position, buffer);
+        moves_t buffer{};
+        std::span<move_t> moves = position.generate_moves(buffer);
         std::array<std::pair<int16_t, int16_t>, 256> move_scores{};
         auto moves_zip = std::views::zip(moves, move_scores);
         for (auto [move, score] : moves_zip)
@@ -136,10 +139,12 @@ struct pvs_t {
         const square_t king = position.by(side, K).front();
         const bool check = !position.checkers(side).empty();
         const squares_t pinned = position.pinned(side);
+        const squares_t ep = position.ep();
 
         for (const move_t move : moves) {
-            const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()});
-            const piece_t captured = do_move(position, move);
+            const bool is_ep = !ep.empty() && squares_t{move.to()} == ep && position.at(move.from()).type() == P;
+            const bool maybe_illegal = check || move.from() == king || (pinned & squares_t{move.from()}) || is_ep;
+            position.do_move(move);
             if (!maybe_illegal || position.checkers(side).empty()) {
                 if (score > alpha) {
                     score = std::max<int16_t>(score, int16_t(-(*this)(depth - 1, -beta, -alpha)));
@@ -149,11 +154,11 @@ struct pvs_t {
                         score = std::max<int16_t>(score, int16_t(-(*this)(depth - 1, -beta, -alpha)));
                 }
                 if (score >= beta) {
-                    undo_move(position, move, captured);
+                    position.undo_move(move);
                     return score;
                 }
             }
-            undo_move(position, move, captured);
+            position.undo_move(move);
         }
         return score;
     }
@@ -164,6 +169,7 @@ struct pvs_t {
 
 void test_perft() {
     position_t position{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"};
+    // position.do_move(move_t{e2, e4});
     // position_t position{"r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -"};
     // position_t position{"8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1"};
     perft_t perft{position};
@@ -218,22 +224,22 @@ int foo() {
     using namespace chess;
 
     constexpr position_t position{"r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -"};
-    generator::moves_t buffer{};
+    moves_t buffer{};
     std::span<move_t> moves;
     size_t count = 0;
 
     for (int i = 0; i < 1000; ++i) {
-        generator::generate_moves(position_t{}, buffer);
-        generator::generate_moves(position_t{1}, buffer);
-        generator::generate_moves(position, buffer);
+        position_t{}.generate_moves(buffer);
+        position_t{1}.generate_moves(buffer);
+        position.generate_moves(buffer);
     }
     const auto t0 = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 1000000; ++i) {
-        moves = generator::generate_moves(position_t{}, buffer);
+        moves = position_t{}.generate_moves(buffer);
         count += moves.size();
-        moves = generator::generate_moves(position_t{1}, buffer);
+        moves = position_t{1}.generate_moves(buffer);
         count += moves.size();
-        moves = generator::generate_moves(position, buffer);
+        moves = position.generate_moves(buffer);
         count += moves.size();
     }
     const auto t1 = std::chrono::high_resolution_clock::now();

@@ -1,8 +1,8 @@
-#include "generator.hpp"
+#include "position.hpp"
 #include "attacks/lookup.hpp"
 #include "types/squares.hpp"
 
-namespace chess::generator {
+namespace chess {
 
 constexpr __v64qu AllSquares = {
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63};
@@ -43,37 +43,38 @@ inline size_t splat_pawns(const int16_t offset, const squares_t targets, const s
     return targets.size();
 }
 
-std::span<move_t> generate_moves(const position_t &position, const std::span<move_t, 256> buffer) noexcept {
+std::span<move_t> position_t::generate_moves(const std::span<move_t, 256> buffer) const noexcept {
     using namespace attacks::lookup;
 
-    const side_t side = position.side();
-    const squares_t occupied = position.by();
-    const squares_t empty = ~position.by();
-    const squares_t enemies = position.by(!side);
-    const squares_t not_us = ~position.by(side);
+    const side_t side = this->side();
+    const squares_t occupied = by();
+    const squares_t empty = ~by();
+    const squares_t enemies = by(!side);
+    const squares_t not_us = ~by(side);
 
     size_t count = 0;
 
     {
-        const square_t from = position.by(side, K).front();
+        const square_t from = by(side, K).front();
         count += splat_leapers(from, king(from) & not_us, buffer.subspan(count));
     }
 
-    for (const square_t from : position.by(side, N))
+    for (const square_t from : by(side, N))
         count += splat_leapers(from, knight(from) & not_us, buffer.subspan(count));
-    
-    for (const square_t from : position.by(side, R, Q))
+
+    for (const square_t from : by(side, R, Q))
         count += splat_sliders(from, rook(from, occupied) & not_us, buffer.subspan(count));
 
-    for (const square_t from : position.by(side, B, Q))
+    for (const square_t from : by(side, B, Q))
         count += splat_sliders(from, bishop(from, occupied) & not_us, buffer.subspan(count));
 
-    const squares_t pawns = position.by(side, P);
+    const squares_t pawns = by(side, P);
+    const squares_t ep = this->ep();
     if (side == WHITE) {
         const squares_t push1 = (pawns << 8) & empty;
         const squares_t push2 = ((pawns & squares_t{_2}) << 8 & empty) << 8 & empty;
-        const squares_t left  = (pawns << 7) & ~squares_t{h} & enemies;
-        const squares_t right = (pawns << 9) & ~squares_t{a} & enemies;
+        const squares_t left  = (pawns << 7) & ~squares_t{h} & (enemies | ep);
+        const squares_t right = (pawns << 9) & ~squares_t{a} & (enemies | ep);
 
         count += splat_pawns(-8, push1, buffer.subspan(count));
         count += splat_pawns(-16, push2, buffer.subspan(count));
@@ -82,8 +83,8 @@ std::span<move_t> generate_moves(const position_t &position, const std::span<mov
     } else {
         const squares_t push1 = (pawns >> 8) & empty;
         const squares_t push2 = ((pawns & squares_t{_7}) >> 8 & empty) >> 8 & empty;
-        const squares_t left  = (pawns >> 9) & ~squares_t{h} & enemies;
-        const squares_t right = (pawns >> 7) & ~squares_t{a} & enemies;
+        const squares_t left  = (pawns >> 9) & ~squares_t{h} & (enemies | ep);
+        const squares_t right = (pawns >> 7) & ~squares_t{a} & (enemies | ep);
 
         count += splat_pawns(+8, push1, buffer.subspan(count));
         count += splat_pawns(+16, push2, buffer.subspan(count));
@@ -94,4 +95,4 @@ std::span<move_t> generate_moves(const position_t &position, const std::span<mov
     return buffer.first(count);
 }
 
-} // namespace chess::generator
+} // namespace chess
