@@ -17,7 +17,9 @@ constexpr size_t MAX_PLY = 256;
 struct state_t {
   piece_t captured;
   square_t captured_square;
-  squares_t en_passant;
+//   squares_t en_passant;
+//   squares_t castling;
+  squares_t special; // en_passant + castling
 };
 
 static_assert(sizeof(state_t) == 16);
@@ -38,6 +40,7 @@ struct position_t final {
     squares_t{e1, e8} // KING
    }
    , en_passant{}
+   , castling_rights{}
    , side_to_move{WHITE} {}
 
   constexpr position_t() noexcept
@@ -55,16 +58,17 @@ struct position_t final {
     squares_t{e1, e8} // KING
    }
    , en_passant{}
+   , castling_rights{squares_t{a1, h1, a8, h8}}
    , side_to_move{WHITE} {}
 
   constexpr position_t(std::string_view fen) noexcept {
-    // constexpr auto castle_lookup = [](char ch) static -> squares_t {
-    //     switch (ch) {
-    //         case 'K': return squares_t{h1}; case 'k': return squares_t{h8};
-    //         case 'Q': return squares_t{a1}; case 'q': return squares_t{a8};
-    //         default: return squares_t{};
-    //     }
-    // };
+    constexpr auto castle_lookup = [](char ch) static -> squares_t {
+        switch (ch) {
+            case 'K': return squares_t{h1}; case 'k': return squares_t{h8};
+            case 'Q': return squares_t{a1}; case 'q': return squares_t{a8};
+            default: return squares_t{};
+        }
+    };
     constexpr auto piece_lookup = [](char ch) static -> piece_t {
         switch (ch) {
             case 'P': return WP; case 'p': return BP;
@@ -119,12 +123,13 @@ struct position_t final {
     }
 
     std::string_view castle_part {*fen_part++};
-    // if (castle_part[0] != '-') {
-    //     for (auto ch : castle_part) {
-    //         new_state.castle |= castle_lookup(ch);
-    //     }
-    //     new_state.hash ^= hashes::castle(new_state.castle);
-    // }
+    if (castle_part[0] != '-') {
+        for (auto ch : castle_part) {
+            // new_state.castle |= castle_lookup(ch);
+            castling_rights |= castle_lookup(ch);
+        }
+        // new_state.hash ^= hashes::castle(new_state.castle);
+    }
 
     std::string_view en_passant_part {*fen_part++};
     if (en_passant_part[0] != '-')
@@ -167,6 +172,7 @@ struct position_t final {
   constexpr squares_t by(const side_t side, const type_t type1, const type_t type2) const noexcept { return by(side) & (by(type1, type2)); }
   constexpr side_t side() const noexcept { return side_to_move; }
   constexpr squares_t ep() const noexcept { return en_passant; }
+  constexpr squares_t castle() const noexcept { return castling_rights; }
 
   constexpr squares_t checkers(side_t side) const noexcept {
     using namespace attacks::lookup;
@@ -177,6 +183,18 @@ struct position_t final {
            (rook(ksq, by()) & by(!side, R, Q)) |
            (bishop(ksq, by()) & by(!side, B, Q)) |
            (pawn(ksq, side) & by(!side, P));
+  }
+
+  // whether the enemy of `defender` attacks `square` on the current board
+  constexpr bool attacked(const square_t square, const side_t defender) const noexcept {
+    using namespace attacks::lookup;
+
+    const side_t attacker = !defender;
+    return !((king(square) & by(attacker, K)) |
+             (knight(square) & by(attacker, N)) |
+             (rook(square, by()) & by(attacker, R, Q)) |
+             (bishop(square, by()) & by(attacker, B, Q)) |
+             (pawn(square, defender) & by(attacker, P))).empty();
   }
 
   // own pieces that would expose the king to a slider attack if moved
@@ -203,7 +221,7 @@ struct position_t final {
     return result;
   }
 
-  std::span<move_t> generate_moves(std::span<move_t, 256> buffer) const noexcept;
+  std::span<move_t> generate_moves(const squares_t filter, const std::span<move_t, 256> buffer) const noexcept;
   void do_move(const move_t move) noexcept;
   void undo_move(const move_t move) noexcept;
 
@@ -212,12 +230,13 @@ private:
   std::array<squares_t, side_t::max> occupied_by_side;
   std::array<squares_t, type_t::max> occupied_by_type;
   squares_t en_passant;
+  squares_t castling_rights;
   side_t side_to_move;
   std::array<state_t, MAX_PLY> history{};
   size_t history_size = 0;
 };
 
-static_assert(sizeof(position_t) == 4256);
+static_assert(sizeof(position_t) == 4264);
 static_assert(position_t{}.by() == squares_t{_1, _2, _7, _8});
 static_assert(position_t{}.by(WHITE) == squares_t{_1, _2});
 static_assert(position_t{}.by(BLACK) == squares_t{_7, _8});

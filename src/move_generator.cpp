@@ -31,9 +31,10 @@ inline size_t splat_sliders(const square_t from, const squares_t targets, const 
     return targets.size();
 }
 
-inline size_t splat_pawns(const int16_t offset, const squares_t targets, const std::span<move_t> buffer) noexcept {
+inline size_t splat_pawns(const int16_t offset, const squares_t targets, const type_t promotion_type, const std::span<move_t> buffer) noexcept {
     // assert(count <= 8);  // max 8 attacks
-    constexpr __v8hu promotion = __v8hu{NO_TYPE, NO_TYPE, NO_TYPE, NO_TYPE, NO_TYPE, NO_TYPE, NO_TYPE, NO_TYPE} << move_t::PROMOTION_SHIFT;
+    const __v8hu promotion = __v8hu{uint16_t(promotion_type), uint16_t(promotion_type), uint16_t(promotion_type), uint16_t(promotion_type),
+                                     uint16_t(promotion_type), uint16_t(promotion_type), uint16_t(promotion_type), uint16_t(promotion_type)} << move_t::PROMOTION_SHIFT;
 
     const __v8hu vec_to    = _mm_cvtepi8_epi16(_mm512_castsi512_si128(_mm512_maskz_compress_epi8(targets, AllSquares)));
     const __v8hu vec_from  = vec_to + uint16_t(offset);
@@ -43,20 +44,38 @@ inline size_t splat_pawns(const int16_t offset, const squares_t targets, const s
     return targets.size();
 }
 
-std::span<move_t> position_t::generate_moves(const std::span<move_t, 256> buffer) const noexcept {
+std::span<move_t> position_t::generate_moves(const squares_t filter, const std::span<move_t, 256> buffer) const noexcept {
     using namespace attacks::lookup;
 
     const side_t side = this->side();
     const squares_t occupied = by();
-    const squares_t empty = ~by();
+    const squares_t empty = ~by() & filter;
     const squares_t enemies = by(!side);
-    const squares_t not_us = ~by(side);
+    const squares_t not_us = ~by(side) & filter;
 
     size_t count = 0;
 
     {
         const square_t from = by(side, K).front();
         count += splat_leapers(from, king(from) & not_us, buffer.subspan(count));
+
+        if (filter == ALL_SQUARES) {
+            if (side == WHITE) {
+                if ((castle() & squares_t{h1}) && (occupied & squares_t{f1, g1}).empty() &&
+                    !attacked(e1, WHITE) && !attacked(f1, WHITE) && !attacked(g1, WHITE))
+                    buffer[count++] = move_t{e1, g1};
+                if ((castle() & squares_t{a1}) && (occupied & squares_t{b1, c1, d1}).empty() &&
+                    !attacked(e1, WHITE) && !attacked(d1, WHITE) && !attacked(c1, WHITE))
+                    buffer[count++] = move_t{e1, c1};
+            } else {
+                if ((castle() & squares_t{h8}) && (occupied & squares_t{f8, g8}).empty() &&
+                    !attacked(e8, BLACK) && !attacked(f8, BLACK) && !attacked(g8, BLACK))
+                    buffer[count++] = move_t{e8, g8};
+                if ((castle() & squares_t{a8}) && (occupied & squares_t{b8, c8, d8}).empty() &&
+                    !attacked(e8, BLACK) && !attacked(d8, BLACK) && !attacked(c8, BLACK))
+                    buffer[count++] = move_t{e8, c8};
+            }
+        }
     }
 
     for (const square_t from : by(side, N))
@@ -71,25 +90,39 @@ std::span<move_t> position_t::generate_moves(const std::span<move_t, 256> buffer
     const squares_t pawns = by(side, P);
     const squares_t ep = this->ep();
     if (side == WHITE) {
+        constexpr squares_t promo_rank = squares_t{_8};
         const squares_t push1 = (pawns << 8) & empty;
         const squares_t push2 = ((pawns & squares_t{_2}) << 8 & empty) << 8 & empty;
         const squares_t left  = (pawns << 7) & ~squares_t{h} & (enemies | ep);
         const squares_t right = (pawns << 9) & ~squares_t{a} & (enemies | ep);
 
-        count += splat_pawns(-8, push1, buffer.subspan(count));
-        count += splat_pawns(-16, push2, buffer.subspan(count));
-        count += splat_pawns(-7, left, buffer.subspan(count));
-        count += splat_pawns(-9, right, buffer.subspan(count));
+        for (const auto [offset, targets] : {std::pair{int16_t(-8), push1}, std::pair{int16_t(-7), left}, std::pair{int16_t(-9), right}}) {
+            const squares_t promo = targets & promo_rank;
+            const squares_t normal = targets & ~promo_rank;
+            count += splat_pawns(offset, normal, NO_TYPE, buffer.subspan(count));
+            if (promo.empty())
+                continue;
+            for (const type_t promotion_type : {Q, R, B, N})
+                count += splat_pawns(offset, promo, promotion_type, buffer.subspan(count));
+        }
+        count += splat_pawns(-16, push2, NO_TYPE, buffer.subspan(count));
     } else {
+        constexpr squares_t promo_rank = squares_t{_1};
         const squares_t push1 = (pawns >> 8) & empty;
         const squares_t push2 = ((pawns & squares_t{_7}) >> 8 & empty) >> 8 & empty;
         const squares_t left  = (pawns >> 9) & ~squares_t{h} & (enemies | ep);
         const squares_t right = (pawns >> 7) & ~squares_t{a} & (enemies | ep);
 
-        count += splat_pawns(+8, push1, buffer.subspan(count));
-        count += splat_pawns(+16, push2, buffer.subspan(count));
-        count += splat_pawns(+9, left, buffer.subspan(count));
-        count += splat_pawns(+7, right, buffer.subspan(count));
+        for (const auto [offset, targets] : {std::pair{int16_t(8), push1}, std::pair{int16_t(9), left}, std::pair{int16_t(7), right}}) {
+            const squares_t promo = targets & promo_rank;
+            const squares_t normal = targets & ~promo_rank;
+            count += splat_pawns(offset, normal, NO_TYPE, buffer.subspan(count));
+            if (promo.empty())
+                continue;
+            for (const type_t promotion_type : {Q, R, B, N})
+                count += splat_pawns(offset, promo, promotion_type, buffer.subspan(count));
+        }
+        count += splat_pawns(+16, push2, NO_TYPE, buffer.subspan(count));
     }
 
     return buffer.first(count);
