@@ -46,3 +46,18 @@ struct std::formatter<chess::move_t, char> {
         return format_to(ctx.out(), "{}{}{}", value.from(), value.to(), value.promotion());
     }
 };
+
+template<typename T>
+struct std::formatter<std::span<T>> {
+    template <class ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template <class FormatContext>
+    auto format(std::span<T> span, FormatContext& ctx) const {
+        for (size_t i = 0; i < span.size(); ++i) {
+            if (i > 0) std::format_to(ctx.out(), "{}", ' ');
+            std::format_to(ctx.out(), "{}", span[i]);
+        }
+        return ctx.out();
+    }
+};

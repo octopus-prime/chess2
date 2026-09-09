@@ -26,6 +26,7 @@ add_executable(chess
   src/move_generator.cpp
   src/move_executor.cpp
   src/chess.cpp
+  src/hash/lookup.hpp
 )
 
 target_include_directories(chess PRIVATE src)

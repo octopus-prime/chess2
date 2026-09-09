@@ -3,11 +3,14 @@
 namespace chess {
 
 void position_t::do_move(const move_t move) noexcept {
+    namespace zobrist = hash::lookup;
+
     const square_t from = move.from();
     const square_t to = move.to();
     const piece_t piece = at(from);
     const squares_t prev_en_passant = en_passant;
     const squares_t prev_castling = castling_rights;
+    const uint64_t prev_hash = current_hash;
 
     square_t captured_square = to;
     piece_t captured = at(to);
@@ -30,9 +33,13 @@ void position_t::do_move(const move_t move) noexcept {
     occupied_by_type[piece.type()].flip(squares_t{from});
     occupied_by_type[placed.type()].flip(squares_t{to});
 
+    current_hash ^= zobrist::piece(piece, from);
+    current_hash ^= zobrist::piece(placed, to);
+
     if (captured != NO_PIECE) {
         occupied_by_side[captured.side()].flip(squares_t{captured_square});
         occupied_by_type[captured.type()].flip(squares_t{captured_square});
+        current_hash ^= zobrist::piece(captured, captured_square);
     }
 
     // castling: a king move of two squares also relocates the corresponding rook
@@ -41,10 +48,13 @@ void position_t::do_move(const move_t move) noexcept {
         if (diff == 2 || diff == -2) {
             const square_t rook_from = square_e(diff == 2 ? int(from) + 3 : int(from) - 4);
             const square_t rook_to   = square_e(diff == 2 ? int(from) + 1 : int(from) - 1);
-            piece_at_square[rook_to] = piece_at_square[rook_from];
+            const piece_t rook = piece_at_square[rook_from];
+            piece_at_square[rook_to] = rook;
             piece_at_square[rook_from] = piece_t{};
             occupied_by_side[piece.side()].flip(squares_t{rook_from, rook_to});
             occupied_by_type[R].flip(squares_t{rook_from, rook_to});
+            current_hash ^= zobrist::piece(rook, rook_from);
+            current_hash ^= zobrist::piece(rook, rook_to);
         }
     }
 
@@ -59,10 +69,18 @@ void position_t::do_move(const move_t move) noexcept {
     if (piece.type() == K)
         castling_rights &= ~(piece.side() == WHITE ? squares_t{a1, h1} : squares_t{a8, h8});
 
+    for (const square_t square : prev_castling & ~castling_rights)
+        current_hash ^= zobrist::castle(square);
+    if (!prev_en_passant.empty())
+        current_hash ^= zobrist::ep(prev_en_passant.front().file());
+    if (!en_passant.empty())
+        current_hash ^= zobrist::ep(en_passant.front().file());
+    current_hash ^= zobrist::side();
+
     side_to_move = !side_to_move;
 
     // history[history_size++] = {captured, captured_square, prev_en_passant, prev_castling};
-    history[history_size++] = {captured, captured_square, prev_en_passant | prev_castling};
+    history[history_size++] = {captured, captured_square, prev_en_passant | prev_castling, prev_hash};
 }
 
 void position_t::undo_move(const move_t move) noexcept {
@@ -105,6 +123,7 @@ void position_t::undo_move(const move_t move) noexcept {
     // castling_rights = state.castling;
     en_passant = state.special & squares_t{_3, _6}; // mask for en_passant squares
     castling_rights = state.special & squares_t{_1, _8}; // mask for castling squares
+    current_hash = state.hash;
     side_to_move = !side_to_move;
 }
 

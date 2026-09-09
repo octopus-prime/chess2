@@ -5,6 +5,7 @@
 #include "types/piece.hpp"
 #include "types/squares.hpp"
 #include "attacks/lookup.hpp"
+#include "hash/lookup.hpp"
 #include "move.hpp"
 #include <array>
 #include <ranges>
@@ -17,51 +18,16 @@ constexpr size_t MAX_PLY = 256;
 struct state_t {
   piece_t captured;
   square_t captured_square;
-//   squares_t en_passant;
-//   squares_t castling;
   squares_t special; // en_passant + castling
+  hash_t hash;
 };
 
-static_assert(sizeof(state_t) == 16);
+static_assert(sizeof(state_t) == 24);
 
 struct position_t final {
-  constexpr position_t(int) noexcept
-   : piece_at_square{}
-   , occupied_by_side{
-    squares_t{_1}, // WHITE
-    squares_t{_8} // BLACK
-    }
-   , occupied_by_type{
-    squares_t{}, // PAWN
-    squares_t{b1, g1, b8, g8}, // KNIGHT
-    squares_t{c1, f1, c8, f8}, // BISHOP
-    squares_t{a1, h1, a8, h8}, // ROOK
-    squares_t{d1, d8}, // QUEEN
-    squares_t{e1, e8} // KING
-   }
-   , en_passant{}
-   , castling_rights{}
-   , side_to_move{WHITE} {}
+  constexpr position_t() noexcept : position_t("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1") {}
 
-  constexpr position_t() noexcept
-   : piece_at_square{}
-   , occupied_by_side{
-    squares_t{_1, _2}, // WHITE
-    squares_t{_7, _8} // BLACK
-    }
-   , occupied_by_type{
-    squares_t{_2, _7}, // PAWN
-    squares_t{b1, g1, b8, g8}, // KNIGHT
-    squares_t{c1, f1, c8, f8}, // BISHOP
-    squares_t{a1, h1, a8, h8}, // ROOK
-    squares_t{d1, d8}, // QUEEN
-    squares_t{e1, e8} // KING
-   }
-   , en_passant{}
-   , castling_rights{squares_t{a1, h1, a8, h8}}
-   , side_to_move{WHITE} {}
-
-  constexpr position_t(std::string_view fen) noexcept {
+  constexpr position_t(const std::string_view fen) noexcept {
     constexpr auto castle_lookup = [](char ch) static -> squares_t {
         switch (ch) {
             case 'K': return squares_t{h1}; case 'k': return squares_t{h8};
@@ -160,6 +126,8 @@ struct position_t final {
     // new_state.last_move = move_t{};
 
     // states.push_back(new_state);
+
+    current_hash = recompute_hash();
   }
 
   constexpr piece_t at(const square_t square) const noexcept { return piece_at_square[square]; }
@@ -170,31 +138,25 @@ struct position_t final {
   constexpr squares_t by(const side_t side, const type_t type) const noexcept { return by(side) & by(type); }
   constexpr squares_t by(const type_t type1, const type_t type2) const noexcept { return by(type1) | by(type2); }
   constexpr squares_t by(const side_t side, const type_t type1, const type_t type2) const noexcept { return by(side) & (by(type1, type2)); }
-  constexpr side_t side() const noexcept { return side_to_move; }
   constexpr squares_t ep() const noexcept { return en_passant; }
   constexpr squares_t castle() const noexcept { return castling_rights; }
+  constexpr side_t side() const noexcept { return side_to_move; }
+  constexpr hash_t hash() const noexcept { return current_hash; }
 
   constexpr squares_t checkers(side_t side) const noexcept {
-    using namespace attacks::lookup;
-
     const square_t ksq = by(side, K).front();
-    return (king(ksq) & by(!side, K)) |
-           (knight(ksq) & by(!side, N)) |
-           (rook(ksq, by()) & by(!side, R, Q)) |
-           (bishop(ksq, by()) & by(!side, B, Q)) |
-           (pawn(ksq, side) & by(!side, P));
+    return attacked(ksq, side);
   }
 
   // whether the enemy of `defender` attacks `square` on the current board
-  constexpr bool attacked(const square_t square, const side_t defender) const noexcept {
+  constexpr squares_t attacked(const square_t square, const side_t defender) const noexcept {
     using namespace attacks::lookup;
-
     const side_t attacker = !defender;
-    return !((king(square) & by(attacker, K)) |
+    return (king(square) & by(attacker, K)) |
              (knight(square) & by(attacker, N)) |
              (rook(square, by()) & by(attacker, R, Q)) |
              (bishop(square, by()) & by(attacker, B, Q)) |
-             (pawn(square, defender) & by(attacker, P))).empty();
+             (pawn(square, defender) & by(attacker, P));
   }
 
   // own pieces that would expose the king to a slider attack if moved
@@ -226,17 +188,32 @@ struct position_t final {
   void undo_move(const move_t move) noexcept;
 
 private:
+  constexpr uint64_t recompute_hash() const noexcept {
+    uint64_t result{};
+    for (piece_t piece = WP; piece <= BK; ++piece)
+      for (const square_t square : by(piece.side(), piece.type()))
+        result ^= hash::lookup::piece(piece, square);
+    for (const square_t square : castling_rights)
+      result ^= hash::lookup::castle(square);
+    if (!en_passant.empty())
+      result ^= hash::lookup::ep(en_passant.front().file());
+    if (side_to_move == BLACK)
+      result ^= hash::lookup::side();
+    return result;
+  }
+
   std::array<piece_t, square_t::max> piece_at_square;
   std::array<squares_t, side_t::max> occupied_by_side;
   std::array<squares_t, type_t::max> occupied_by_type;
   squares_t en_passant;
   squares_t castling_rights;
   side_t side_to_move;
+  uint64_t current_hash{};
   std::array<state_t, MAX_PLY> history{};
   size_t history_size = 0;
 };
 
-static_assert(sizeof(position_t) == 4264);
+static_assert(sizeof(position_t) == 6320);
 static_assert(position_t{}.by() == squares_t{_1, _2, _7, _8});
 static_assert(position_t{}.by(WHITE) == squares_t{_1, _2});
 static_assert(position_t{}.by(BLACK) == squares_t{_7, _8});
@@ -261,5 +238,7 @@ static_assert(position_t{}.by(BLACK, K) == squares_t{e8});
 static_assert(position_t{}.by(WHITE, R, Q) == squares_t{a1, h1, d1});
 static_assert(position_t{}.by(BLACK, R, Q) == squares_t{a8, h8, d8});
 static_assert(position_t{}.side() == WHITE);
+static_assert(position_t{}.hash() == position_t{}.hash());
+static_assert(position_t{}.hash() != position_t{"7k/8/8/8/8/8/8/K6R w - - 0 1"}.hash());
 
 } // namespace chess
