@@ -1,17 +1,19 @@
 #pragma once
 
-#include <cstdint>
-#include <type_traits>
-#include <format>
+#include "type.hpp"
 
 namespace chess {
 
-enum score_e : int16_t {MIN = -32000, MAX = 32000, DRAW = 0, WIN = 30000, LOSS = -30000, PAWN = 100, KNIGHT = 300, BISHOP = 300, ROOK = 500, QUEEN = 900, KING = 20000};
+enum score_e : int16_t {MIN = -32000, MAX = 32000, DRAW = 0, WIN = 30000, LOSS = -30000, PAWN = 100, KNIGHT = 300, BISHOP = 300, ROOK = 500, QUEEN = 900, KING = 20000, TIME_OUT = -32100};
 struct score_t final {
     using enum_t = score_e;
     using value_t = std::underlying_type_t<enum_t>;
 
     constexpr score_t(const score_e v = DRAW) noexcept : value(v) {}
+    constexpr score_t(const type_t t) noexcept {
+        constexpr std::array<value_t, type_t::max> scores {PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING, DRAW};
+        value = scores[size_t(t)];
+    }
     constexpr operator score_e() const noexcept { return score_e(value); }
     constexpr bool is_win() const noexcept { return value >= WIN; }
     constexpr bool is_loss() const noexcept { return value <= LOSS; }

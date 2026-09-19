@@ -7,15 +7,32 @@
 #include <vector>
 #include <optional>
 #include <algorithm>
+#include <tuple>
+#include <type_traits>
+#include <ranges>
 
 namespace chess {
 
-enum flag_t : std::uint8_t {
+enum flag_e : std::uint8_t {
 	UNKNOWN,
 	UPPER,
 	LOWER,
 	EXACT
 };
+
+// struct flag_t {
+// 	using enum_t = flag_e;
+// 	using value_t = std::underlying_type_t<enum_t>;
+
+// 	constexpr flag_t() noexcept = default;
+// 	constexpr flag_t(flag_e flag, bool replace = false) noexcept : value(flag), replace(replace) {}
+// 	constexpr operator flag_e() const noexcept { return flag_e(value); }
+// 	constexpr operator bool() const noexcept { return replace; }
+
+// private:
+// 	value_t value:7;
+// 	value_t replace:1;
+// };
 
 class transposition_t {
 	struct entry_t {
@@ -23,7 +40,8 @@ class transposition_t {
 		key_t key;		//2*2
 		move_t move;	//2
 		score_t score;	//2
-		flag_t flag;	//1
+		// flag_t flag;	//1
+		flag_e flag;	//1
 		depth_t	depth;	//1
 	};
 
@@ -56,19 +74,19 @@ public:
 		used = 0;
     }
 
-    void put(const hash_t hash, const move_t move, const score_t score, const flag_t flag, const depth_t depth) noexcept {
-		const entry_t::key_t key = {uint16_t(hash), uint16_t(hash >> 16)};
+    void put(const hash_t hash, const move_t move, const score_t score, const flag_e flag, const depth_t depth) noexcept {
+		const entry_t::key_t key = {uint16_t(hash >> 43), uint16_t(hash >> 23)};
         bucket_t& bucket = buckets[hash % buckets.size()];
 		entry_t* entry = std::ranges::find(bucket.entries, key, &entry_t::key);
 		if (entry == std::end(bucket.entries)) {
 			entry = std::ranges::min_element(bucket.entries, {}, &entry_t::depth);
-			used += entry->flag == UNKNOWN;
+			used += flag_e(entry->flag) == UNKNOWN;
 		}
 		*entry = {key, move, score, flag, depth};
     }
 
     std::optional<entry_t> get(const hash_t hash) const noexcept {
-		const entry_t::key_t key = {uint16_t(hash), uint16_t(hash >> 16)};
+		const entry_t::key_t key = {uint16_t(hash >> 43), uint16_t(hash >> 23)};
         const bucket_t& bucket = buckets[hash % buckets.size()];
 		const entry_t* entry = std::ranges::find(bucket.entries, key, &entry_t::key);
 		if (entry == std::end(bucket.entries))

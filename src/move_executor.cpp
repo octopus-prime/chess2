@@ -11,6 +11,7 @@ void position_t::do_move(const move_t move) noexcept {
     const squares_t prev_en_passant = en_passant;
     const squares_t prev_castling = castling_rights;
     const uint64_t prev_hash = current_hash;
+    const uint8_t prev_half_moves = half_moves;
 
     square_t captured_square = to;
     piece_t captured = at(to);
@@ -79,8 +80,10 @@ void position_t::do_move(const move_t move) noexcept {
 
     side_to_move = !side_to_move;
 
+    half_moves = (piece.type() == P || captured != NO_PIECE) ? 0 : half_moves + 1;
+
     // history[history_size++] = {captured, captured_square, prev_en_passant, prev_castling};
-    history[history_size++] = {captured, captured_square, prev_en_passant | prev_castling, prev_hash};
+    history[history_size++] = {captured, captured_square, prev_half_moves, prev_en_passant | prev_castling, prev_hash};
 }
 
 void position_t::undo_move(const move_t move) noexcept {
@@ -124,6 +127,34 @@ void position_t::undo_move(const move_t move) noexcept {
     en_passant = state.special & squares_t{_3, _6}; // mask for en_passant squares
     castling_rights = state.special & squares_t{_1, _8}; // mask for castling squares
     current_hash = state.hash;
+    half_moves = state.half_moves;
+    side_to_move = !side_to_move;
+}
+
+void position_t::do_null_move() noexcept {
+    namespace zobrist = hash::lookup;
+
+    const squares_t prev_en_passant = en_passant;
+    const uint64_t prev_hash = current_hash;
+    const uint8_t prev_half_moves = half_moves;
+
+    if (!en_passant.empty())
+        current_hash ^= zobrist::ep(en_passant.front().file());
+    en_passant = squares_t{};
+    current_hash ^= zobrist::side();
+
+    side_to_move = !side_to_move;
+    half_moves = prev_half_moves + 1;
+
+    history[history_size++] = {NO_PIECE, square_t{}, prev_half_moves, prev_en_passant, prev_hash};
+}
+
+void position_t::undo_null_move() noexcept {
+    const state_t state = history[--history_size];
+
+    en_passant = state.special & squares_t{_3, _6}; // mask for en_passant squares
+    current_hash = state.hash;
+    half_moves = state.half_moves;
     side_to_move = !side_to_move;
 }
 

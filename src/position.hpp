@@ -8,8 +8,10 @@
 #include "hash/lookup.hpp"
 #include "move.hpp"
 #include <array>
+#include <cstdint>
 #include <ranges>
 #include <span>
+#include <algorithm>
 
 namespace chess {
 
@@ -18,6 +20,7 @@ constexpr size_t MAX_PLY = 256;
 struct state_t {
   piece_t captured;
   square_t captured_square;
+  uint8_t half_moves;
   squares_t special; // en_passant + castling
   hash_t hash;
 };
@@ -101,10 +104,11 @@ struct position_t final {
     if (en_passant_part[0] != '-')
         en_passant = squares_t{square_t{file_e(en_passant_part[0] - 'a'), rank_e(en_passant_part[1] - '1')}};
 
-    // if (fen_part != fen_parts.end()) {
-    //     std::string_view half_move_part {*fen_part++};
-    //     std::from_chars(&*half_move_part.begin(), &*half_move_part.end(), new_state.half_move);
-    // }
+    if (fen_part != fen_parts.end()) {
+        std::string_view half_moves_part {*fen_part++};
+        std::from_chars(&*half_moves_part.begin(), &*half_moves_part.end(), half_moves);
+        // std::from_chars(&*half_moves_part.begin(), &*half_moves_part.end(), new_state.half_move);
+    }
 
     // if (fen_part != fen_parts.end()) {
     //     std::string_view full_move_part {*fen_part++};
@@ -183,13 +187,36 @@ struct position_t final {
     return result;
   }
 
+  bool is_no_material() const noexcept {
+      return by(P).empty() && by(R).empty() && by(Q).empty() 
+      && by(WHITE, N, B).size() <= 1 
+      && by(BLACK, N, B).size()  <= 1;
+  }
+
+  bool is_50_moves_rule() const noexcept {
+      return half_moves >= 100;
+  }
+
+  bool is_3_fold_repetition() const noexcept {
+      const int s = int(history_size);
+      const int limit = std::max(0, s - 2 * half_moves);
+      size_t count = 0;
+      for (int i = s - 2; i >= limit; i -= 2) {
+          if (history[size_t(i)].hash == current_hash)
+              count++;
+      }
+      return count >= 3;
+  }
+
   std::span<move_t> generate_moves(const squares_t filter, const std::span<move_t, 256> buffer) const noexcept;
   void do_move(const move_t move) noexcept;
   void undo_move(const move_t move) noexcept;
+  void do_null_move() noexcept;
+  void undo_null_move() noexcept;
 
 private:
-  constexpr uint64_t recompute_hash() const noexcept {
-    uint64_t result{};
+  constexpr hash_t recompute_hash() const noexcept {
+    hash_t result{};
     for (piece_t piece = WP; piece <= BK; ++piece)
       for (const square_t square : by(piece.side(), piece.type()))
         result ^= hash::lookup::piece(piece, square);
@@ -208,7 +235,8 @@ private:
   squares_t en_passant;
   squares_t castling_rights;
   side_t side_to_move;
-  uint64_t current_hash{};
+  uint8_t half_moves{};
+  hash_t current_hash{};
   std::array<state_t, MAX_PLY> history{};
   size_t history_size = 0;
 };
