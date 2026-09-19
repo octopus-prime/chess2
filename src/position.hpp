@@ -4,6 +4,7 @@
 #include "types/square.hpp"
 #include "types/piece.hpp"
 #include "types/squares.hpp"
+#include "types/score.hpp"
 #include "attacks/lookup.hpp"
 #include "hash/lookup.hpp"
 #include "move.hpp"
@@ -185,6 +186,88 @@ struct position_t final {
     }
 
     return result;
+  }
+
+  // Stockfish-style static-exchange evaluation: true if the exchange on move.to() nets >= threshold
+  constexpr bool see_ge(const move_t move, const score_t threshold) const noexcept {
+    using namespace attacks::lookup;
+
+    const square_t from = move.from();
+    const square_t to = move.to();
+    const piece_t moved = at(from);
+    const piece_t captured_piece = at(to);
+    const bool is_ep = moved.type() == P && !ep().empty() && squares_t{to} == ep();
+    const type_t promotion = move.promotion();
+
+    // NO_PIECE.type() aliases to P, so an empty target must be checked explicitly
+    const type_t captured_type = is_ep ? type_t(P) : (captured_piece == NO_PIECE ? type_t(NO_TYPE) : captured_piece.type());
+
+    int swap = int(score_t(captured_type)) - int(threshold);
+    if (promotion != NO_TYPE)
+      swap += int(score_t(promotion)) - int(score_t(P));
+    if (swap < 0)
+      return false;
+
+    const type_t moved_type = promotion != NO_TYPE ? promotion : moved.type();
+    swap = int(score_t(moved_type)) - swap;
+    if (swap <= 0)
+      return true;
+
+    squares_t occupied = by();
+    occupied.reset(from);
+    occupied.reset(to);
+    if (is_ep)
+      occupied.reset(square_e(int(to) + (moved.side() == WHITE ? -8 : 8)));
+
+    squares_t attackers = (king(to) & by(K)) | (knight(to) & by(N)) |
+                          (rook(to, occupied) & by(R, Q)) | (bishop(to, occupied) & by(B, Q)) |
+                          (pawn(to, WHITE) & by(BLACK, P)) | (pawn(to, BLACK) & by(WHITE, P));
+    attackers &= occupied;
+
+    side_t stm = moved.side();
+    int res = 1;
+
+    while (true) {
+      stm = ~stm;
+      attackers &= occupied;
+
+      const squares_t stm_attackers = attackers & by(stm);
+      if (stm_attackers.empty())
+        break;
+
+      res ^= 1;
+
+      squares_t bb;
+      if (!(bb = stm_attackers & by(P)).empty()) {
+        if ((swap = int(score_t(P)) - swap) < res)
+          break;
+        occupied.reset(bb.front());
+        attackers |= bishop(to, occupied) & by(B, Q);
+      } else if (!(bb = stm_attackers & by(N)).empty()) {
+        if ((swap = int(score_t(N)) - swap) < res)
+          break;
+        occupied.reset(bb.front());
+      } else if (!(bb = stm_attackers & by(B)).empty()) {
+        if ((swap = int(score_t(B)) - swap) < res)
+          break;
+        occupied.reset(bb.front());
+        attackers |= bishop(to, occupied) & by(B, Q);
+      } else if (!(bb = stm_attackers & by(R)).empty()) {
+        if ((swap = int(score_t(R)) - swap) < res)
+          break;
+        occupied.reset(bb.front());
+        attackers |= rook(to, occupied) & by(R, Q);
+      } else if (!(bb = stm_attackers & by(Q)).empty()) {
+        if ((swap = int(score_t(Q)) - swap) < res)
+          break;
+        occupied.reset(bb.front());
+        attackers |= (bishop(to, occupied) & by(B, Q)) | (rook(to, occupied) & by(R, Q));
+      } else { // king: only legal if the opponent has no more attackers
+        return (attackers & by(!stm)).empty() ? bool(res) : bool(res ^ 1);
+      }
+    }
+
+    return bool(res);
   }
 
   bool is_no_material() const noexcept {

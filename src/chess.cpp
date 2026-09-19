@@ -4,7 +4,7 @@
 void test_search() {
     using namespace chess;
     // position_t position{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"}; // startpos
-    // position_t position{"r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -"}; // kiwepete
+    position_t position{"r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -"}; // kiwepete
     // position_t position{"8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1"}; // matt in 2
     // position_t position{"r1bqr3/ppp1B1kp/1b4p1/n2B4/3PQ1P1/2P5/P4P2/RN4K1 w - - 0 1"}; // matt in 4
     // position.do_move(move_t{e4, e5});
@@ -12,7 +12,7 @@ void test_search() {
 
     // position_t position{"4k3/8/8/8/8/8/4P3/4K1N1 w - -"};
     // position_t position{"4k3/4p3/8/8/8/8/3PP3/4K1N1 w - - 0 1"};
-    position_t position{"4k3/3pp3/8/8/8/8/3PP3/4K1N1 w - - 0 1"};
+    // position_t position{"4k3/3pp3/8/8/8/8/3PP3/4K1N1 w - - 0 1"};
     // position_t position{"8/4k3/3pp3/8/3PP3/4KN2/8/8 w - - 0 1"};
     // position_t position{"8/4k3/3pp3/8/8/4KN2/8/8 w - - 0 1"};
     // position_t position{"8/4k3/8/8/2p5/4KN2/8/8 w - - 0 1"};

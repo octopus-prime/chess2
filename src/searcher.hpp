@@ -89,26 +89,36 @@ struct negamax_t {
 
     using scores_t = std::tuple<bool, score_t, uint32_t>;
 
-    constexpr score_t eval_move(const move_t move) const noexcept {
+    // false only for captures/promotions/en passant that lose material per see_ge
+    constexpr bool good_capture(const move_t move) const noexcept {
+        const bool ep = position.at(move.from()).type() == P && !position.ep().empty() && squares_t{move.to()} == position.ep();
+        const bool capture = ep || position.at(move.to()) != NO_PIECE || move.promotion() != NO_TYPE;
+        return !capture || position.see_ge(move, score_e(0));
+    }
+
+    constexpr std::tuple<bool, score_t> eval_move(const move_t move) const noexcept {
         const score_t piece = position.at(move.from()).type();
         const score_t captured = position.at(move.to()).type();
         const score_t promotion = move.promotion();
-        return score_e(captured + promotion - piece / 10);
+        return std::make_tuple(good_capture(move), score_e(captured + promotion - piece / 10));
     }
 
-    constexpr void sort_moves(const std::span<move_t> moves) const noexcept {
-        std::array<score_t, 256> move_scores{};
+    // sorts moves and reports, per move (post-sort order), whether it passed the good_capture check
+    constexpr void sort_moves(const std::span<move_t> moves, const std::span<bool, 256> good) const noexcept {
+        std::array<std::tuple<bool, score_t>, 256> move_scores{};
         auto moves_zip = std::views::zip(moves, move_scores);
         for (auto [move, score] : moves_zip)
             score = eval_move(move);
         std::ranges::sort(moves_zip, std::greater<>{}, [](const auto &tuple) { return std::get<1>(tuple); });
+        for (size_t i = 0; i < moves.size(); ++i)
+            good[i] = std::get<0>(move_scores[i]);
     }
 
     constexpr scores_t eval_move(const move_t move, const move_t best, const depth_t depth) const noexcept {
         const score_t piece = position.at(move.from()).type();
         const score_t captured = position.at(move.to()).type();
         const score_t promotion = move.promotion();
-        return std::make_tuple(move == best, score_e(captured + promotion - piece / 10), uint32_t(history.get(move, position.at(move.from())) ) >> (depth - 1));
+        return std::make_tuple(move == best, score_e((good_capture(move) ? 10000 : 0) + captured + promotion - piece / 10), uint32_t(history.get(move, position.at(move.from())) ) >> (depth - 1));
     }
 
     constexpr void sort_moves(const std::span<move_t> moves, const move_t best, const depth_t depth) const noexcept {
@@ -135,7 +145,8 @@ struct negamax_t {
 
         moves_t buffer{};
         std::span<move_t> moves = position.generate_moves(position.by(~position.side()), buffer);
-        sort_moves(moves);
+        std::array<bool, 256> good{};
+        sort_moves(moves, good);
 
         const side_t side = position.side();
         const square_t king = position.by(side, K).front();
@@ -143,7 +154,11 @@ struct negamax_t {
         const squares_t pinned = position.pinned(side);
         const squares_t ep = position.ep();
 
-        for (const move_t move : moves) {
+        for (size_t i = 0; i < moves.size(); ++i) {
+            const move_t move = moves[i];
+            if (!check && !good[i])
+                continue;
+
             position.do_move(move);
 
             const bool is_ep = !ep.empty() && squares_t{move.to()} == ep && position.at(move.from()).type() == P;
